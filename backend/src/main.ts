@@ -19,7 +19,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('Api');
   app.enableCors({
-  origin: 'http://localhost:3001',
+  origin: 'https://roquesoft.com:3000',
 });
   await app.listen(Number(process.env.PORT));
 }
