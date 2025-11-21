@@ -5,9 +5,12 @@ import { UserModule } from './user/user.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CommonModule } from './common/common.module';
 import { SeedModule } from './seed/seed.module';
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 
 @Module({
-  imports: [ UserModule, MongooseModule.forRoot('mongodb://localhost:27017/nest-practica'), CommonModule, SeedModule],
+  imports: [ UserModule, MongooseModule.forRoot(String(process.env.MONGODB)), CommonModule, SeedModule],
   controllers: [AppController],
   providers: [AppService],
 })
