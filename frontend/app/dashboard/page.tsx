@@ -1,6 +1,7 @@
 "use client";
 import { Toaster } from "react-hot-toast";
-import Login from "../component/login";
+import  Inicio  from "../../component/div-inicio";
+
 
 export default function UsersPage() {
   return(
@@ -14,7 +15,7 @@ export default function UsersPage() {
           },
         }}
       />
-    <Login/>
+    <Inicio />
     </>
   )
 
