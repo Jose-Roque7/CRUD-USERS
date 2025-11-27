@@ -1,7 +1,7 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import Cookies from 'js-cookie';
-import api from '../lib/axios';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import Cookies from "js-cookie";
+import api from "../lib/axios";
 
 interface AuthState {
   isLoggedIn: boolean;
@@ -15,7 +15,7 @@ export const useAuthStore = create<AuthState>()(
       isLoggedIn: false,
       checkAuth: async () => {
         try {
-          const res = await api.get('/perfil');
+          const res = await api.get("/perfil");
           set({ isLoggedIn: res.status === 200 });
         } catch (error) {
           set({ isLoggedIn: false });
@@ -23,32 +23,38 @@ export const useAuthStore = create<AuthState>()(
       },
       logout: async () => {
         try {
-          await api.post('/login/logout');
+          await api.post(
+            "/login/logout",
+            {},
+            {
+              withCredentials: true, // Importante para cookies
+            }
+          );
         } catch (error) {
-          console.error('Error during logout:', error);
+          console.error("Error during logout:", error);
         } finally {
           set({ isLoggedIn: false });
         }
       },
     }),
-    { 
-      name: 'auth-storage',
+    {
+      name: "auth-storage",
       storage: {
         getItem: (name) => {
           const value = Cookies.get(name);
           return value ? JSON.parse(value) : null;
         },
         setItem: (name, value) => {
-          Cookies.set(name, JSON.stringify(value), { 
+          Cookies.set(name, JSON.stringify(value), {
             expires: 7,
-            path: '/',
-            sameSite: 'strict'
+            path: "/",
+            sameSite: "strict",
           });
         },
         removeItem: (name) => {
-          Cookies.remove(name, { path: '/' });
-        }
-      }
+          Cookies.remove(name, { path: "/" });
+        },
+      },
     }
   )
 );

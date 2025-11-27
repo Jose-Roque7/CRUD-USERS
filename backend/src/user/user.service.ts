@@ -25,12 +25,55 @@ export class UserService {
     
   }
 
-  findAll(paginationDto: PaginationDto) {
-    const {limit = 0} = paginationDto
-    return this.UserModel.find()
-    .limit(limit)
-    .sort( {codigo: 1})
+  async findAll(paginationDto: PaginationDto) {
+  const { limit = 10, page = 1, search } = paginationDto;
+  const skip = (page - 1) * limit;
+
+  // Construir query de búsqueda
+  let query = {};
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    const numericSearch = Number(search);
+    
+    query = {
+      $or: [
+        { name: searchRegex },
+        { lastname: searchRegex },
+        ...(isNaN(numericSearch) ? [] : [{ codigo: numericSearch }])
+      ]
+    };
   }
+
+  // Si limit es 0, devolver todos los registros sin paginación
+  if (limit === 0) {
+    const users = await this.UserModel.find(query)
+      .sort({ codigo: 1 })
+      .exec();
+    return users;
+  }
+
+  // Ejecutar consulta con paginación
+  const [users, total] = await Promise.all([
+    this.UserModel.find(query)
+      .skip(skip)
+      .limit(limit)
+      .sort({ codigo: 1 })
+      .exec(),
+    this.UserModel.countDocuments(query).exec()
+  ]);
+
+  return {
+    users,
+    pagination: {
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      totalUsers: total,
+      hasNext: page < Math.ceil(total / limit),
+      hasPrev: page > 1,
+      limit: limit
+    }
+  };
+}
 
   deleteAll(){
     return this.UserModel.deleteMany()

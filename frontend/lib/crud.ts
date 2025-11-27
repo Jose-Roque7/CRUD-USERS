@@ -1,15 +1,26 @@
 import api from "@/lib/axios";
 
-// Obtener todos los usuarios
-export const getItems = async () => {
+// Obtener usuarios con paginación
+export const getItems = async (page: number = 1, limit: number = 10, search?: string) => {
   try {
-    const response = await api.get("/user");
-    return response.data; // Retorna los datos de los usuarios
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString()
+    });
+    
+    if (search) {
+      params.append('search', search);
+    }
+
+    const response = await api.get(`/user?${params}`);
+    return response.data;
   } catch (err) {
     console.error("Error al obtener usuarios:", err);
     throw new Error("Error al obtener usuarios");
   }
 };
+
+// Las demás funciones se mantienen igual...
 
 export const deleteAll = async () => {
   try {

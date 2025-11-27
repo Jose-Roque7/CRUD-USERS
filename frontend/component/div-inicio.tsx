@@ -26,6 +26,15 @@ interface User {
   codigo: number;
 }
 
+interface PaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalUsers: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+  limit: number;
+}
+
 export default function DivInicio() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +48,18 @@ export default function DivInicio() {
 
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [usersToDelete, setUsersToDelete] = useState(false);
+
+  // Estados de paginación
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    currentPage: 1,
+    totalPages: 1,
+    totalUsers: 0,
+    hasNext: false,
+    hasPrev: false,
+    limit: 10
+  });
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentSearch, setCurrentSearch] = useState("");
 
   // Formularios
   const [formDataCreate, setFormDataCreate] = useState({
@@ -54,45 +75,119 @@ export default function DivInicio() {
   });
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [authChecked, setAuthChecked] = useState(false);
-const { isLoggedIn, checkAuth, logout } = useAuthStore();
+  const { isLoggedIn, checkAuth, logout } = useAuthStore();
   const router = useRouter();
 
   // Estados para navbar móvil
   const [mobileMenu, setMobileMenu] = useState(false);
 
-// Verificar cookie de login al cargar
-useEffect(() => {
-  if (!isLoggedIn) {
-    router.push('/');
-  }
-}, [isLoggedIn, router]);
+  // Hook para detectar dispositivo
+  const useDeviceDetection = () => {
+    const [isMobile, setIsMobile] = useState(false);
 
+    useEffect(() => {
+      const checkDevice = () => {
+        setIsMobile(window.innerWidth < 768);
+      };
 
-  // Cargar usuarios
+      checkDevice();
+      window.addEventListener('resize', checkDevice);
+
+      return () => window.removeEventListener('resize', checkDevice);
+    }, []);
+
+    return isMobile;
+  };
+
+  const isMobile = useDeviceDetection();
+
   useEffect(() => {
-    if (!isLoggedIn) return;
-    async function fetchUsersAndLogin() {
-      try {
-        const data = await getItems();
-        setUsers(data);
-        setLoading(false);
-      } catch {
-        return;
+    const checkAuthAndRedirect = async () => {
+      const currentState = useAuthStore.getState();
+      
+      if (!currentState.isLoggedIn) {
+        router.push('/');
       }
+    };
+
+    checkAuthAndRedirect();
+  }, [router]);
+
+  // Ajustar items por página según dispositivo
+  useEffect(() => {
+    if (isMobile) {
+      setItemsPerPage(5);
+    } else {
+      setItemsPerPage(10);
     }
+  }, [isMobile]);
 
-    // Llamada inicial
-    if (isLoggedIn) fetchUsersAndLogin();
+  const fetchUsers = async (page: number = pagination.currentPage, limit: number = itemsPerPage, search: string = currentSearch) => {
+  try {
+    const data = await getItems(page, limit, search);
+    if (data.pagination) {
+      // Si viene con paginación (nuevo formato)
+      setUsers(data.users);
+      setPagination(data.pagination);
+    } else {
+      // Si viene sin paginación (formato antiguo - array directo)
+      setUsers(data);
+      setPagination({
+        currentPage: 1,
+        totalPages: 1,
+        totalUsers: data.length,
+        hasNext: false,
+        hasPrev: false,
+        limit: limit
+      });
+    }
+  } catch  {
+    return;
+  }finally {
+    setLoading(false);
+  }
+};
 
-    // Llamada cada segundo
-    const intervalId = setInterval(fetchUsersAndLogin, 1000);
+// Cargar usuarios - efecto principal SOLO para cambios de búsqueda o items por página
+useEffect(() => {
+  if (!isLoggedIn) return;
+  
+  // Solo recargar cuando cambie la búsqueda o items por página, manteniendo la página actual
+  fetchUsers(1, itemsPerPage, currentSearch);
+}, [isLoggedIn, itemsPerPage, currentSearch]); // pagination.currentPage removido
 
-    // Limpieza
-    return () => clearInterval(intervalId);
-  }, [isLoggedIn]);
+// Función para cambiar página
+const handlePageChange = (newPage: number) => {
+  fetchUsers(newPage, itemsPerPage, currentSearch);
+};
 
- 
+// Función para cambiar items por página
+const handleItemsPerPageChange = (newLimit: number) => {
+  setItemsPerPage(newLimit);
+  // Al cambiar items por página, ir a la página 1
+  fetchUsers(1, newLimit, currentSearch);
+};
+
+// Función para búsqueda
+const handleSearch = async () => {
+  if (!searchValue.trim()) {
+    setCurrentSearch("");
+    // Al limpiar búsqueda, ir a la página 1
+    fetchUsers(1, itemsPerPage, "");
+    return;
+  }
+
+  setSearching(true);
+  try {
+    setCurrentSearch(searchValue);
+    // Al buscar, ir a la página 1
+    fetchUsers(1, itemsPerPage, searchValue);
+  } catch (error) {
+    toast.error("Error al buscar usuarios");
+  } finally {
+    setSearching(false);
+  }
+};
   // Selección múltiple
   const toggleSelect = (id: string) => {
     setSelectedIds(prev =>
@@ -109,6 +204,8 @@ useEffect(() => {
       await deleteUsers(selectedIds);
       setSelectedIds([]);
       toast.success(`${selectedIds.length} usuarios eliminados correctamente`);
+      // Recargar la página actual después de eliminar
+      fetchUsers(pagination.currentPage, itemsPerPage, currentSearch);
     } catch (error) {
       toast.error("Error eliminando usuarios");
     }
@@ -155,6 +252,9 @@ useEffect(() => {
 
       toast.success("Usuario actualizado correctamente");
 
+      // Recargar datos actualizados
+      fetchUsers(pagination.currentPage, itemsPerPage, currentSearch);
+
     } catch (err) {
       toast.error("Error al actualizar usuario");
     }
@@ -187,8 +287,8 @@ useEffect(() => {
 
       await createUser(formDataCreate);
 
-      const data = await getItems();
-      setUsers(data);
+      // Recargar la primera página para ver el nuevo usuario
+      fetchUsers(1, itemsPerPage, currentSearch);
 
       setFormDataCreate({ name: "", lastname: "", codigo: 1 });
       setShowCreateForm(false);
@@ -204,8 +304,7 @@ useEffect(() => {
   async function handleSeedUsers() {
     try {
       await seedUsers();
-      const data = await getItems();
-      setUsers(data);
+      fetchUsers(1, itemsPerPage, currentSearch);
       toast.success("Usuarios de prueba generados correctamente");
     } catch (err) {
       toast.error("Error al generar usuarios de prueba");
@@ -216,8 +315,7 @@ useEffect(() => {
   async function handleDeleteAllUsers() {
     try {
       await deleteAll();
-      const data = await getItems();
-      setUsers(data);
+      fetchUsers(1, itemsPerPage, currentSearch);
       toast.success("Usuarios eliminados correctamente");
       setSelectedIds([]);
     } catch (err) {
@@ -225,38 +323,19 @@ useEffect(() => {
     }
   }
 
-  // --- BUSCAR ---
-  async function handleSearch() {
-    if (!searchValue.trim()) {
-      toast.error("Por favor ingresa un valor para buscar");
-      return;
-    }
-
-    setSearching(true);
-    setFoundUser(null);
-
-    try {
-      const userExists = await checkIfUserExists(searchValue, "");
-      if (!userExists) {
-        toast.error(`No se encontró ningún usuario con el valor "${searchValue}"`);
-        return;
-      }
-
-      const data = await getuser(searchValue);
-      setFoundUser(data);
-
-    } catch {
-      toast.error("Error al buscar usuario");
-    } finally {
-      setSearching(false);
-    }
-  }
 
   // --- ELIMINAR UNO ---
   async function handleDeleteUser(id: string) {
     try {
       await deleteUser(id);
-      setUsers(prev => prev.filter(u => u._id !== id));
+      
+      // Si queda solo un usuario en la página actual y no es la primera página, retroceder
+      if (users.length === 1 && pagination.currentPage > 1) {
+        fetchUsers(pagination.currentPage - 1, itemsPerPage, currentSearch);
+      } else {
+        fetchUsers(pagination.currentPage, itemsPerPage, currentSearch);
+      }
+      
       toast.success("Usuario eliminado correctamente");
       setSelectedIds([]);
     } catch {
@@ -266,7 +345,7 @@ useEffect(() => {
 
   const handleLogout = async () => {
     await logout();
-    router.push("/login");
+    router.push("/");
   }
 
   // --- LOADING ---
@@ -280,7 +359,6 @@ useEffect(() => {
 
   return (
     <main className="min-h-screen bg-black text-white font-sans"> 
-
       {/* NAVBAR ELEGANTE */}
       <header
         className={`w-full fixed top-0 z-50 bg-black border-b border-gray-600 backdrop-blur-sm transition-all duration-300`}
@@ -368,20 +446,14 @@ useEffect(() => {
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full bg-black border border-gray-600 rounded-xl pl-12 pr-4 py-3
+              className="w-full bg-black border border-gray-600 rounded-xl pl-12 pr-3  py-3
                        text-white placeholder-gray-400 shadow-lg
                        focus:outline-none focus:border-white focus:ring-2 focus:ring-white/20 transition-all duration-200"
             />
             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
               <FaSearch size={16} />
             </div>
-
-          </div>
-          {searching && (
-            <div className="absolute -bottom-6 left-0 right-0 flex justify-center">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             </div>
-          )}
         </div>
       </div>
 
@@ -389,7 +461,7 @@ useEffect(() => {
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
         {/* ACCIONES RÁPIDAS MEJORADAS */}
         <div className="flex flex-wrap gap-3 mb-8 justify-center md:justify-start">
-          {users.length === 0 && (
+          {users.length === 0 && !currentSearch && (
             <button
               onClick={handleSeedUsers}
               className="px-5 py-2.5 rounded-xl border border-gray-600 text-white font-medium 
@@ -426,10 +498,27 @@ useEffect(() => {
           {users.length > 0 && (
             <div className="px-4 py-2.5 rounded-xl border border-gray-600 text-white font-medium flex items-center gap-2">
               <FaUserFriends size={14} />
-              <span>Total: <strong>{users.length}</strong></span>
+              <span>Total: <strong>{pagination.totalUsers}</strong></span>
               {selectedIds.length > 0 && (
                 <span className="ml-2">| Seleccionados: <strong>{selectedIds.length}</strong></span>
               )}
+            </div>
+          )}
+
+          {/* Selector de items por página */}
+          {users.length > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-600">
+              <span className="text-gray-400 text-sm">Mostrar:</span>
+              <select 
+                value={itemsPerPage}
+                onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                className="bg-black border-none text-white text-sm focus:outline-none focus:ring-0"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
             </div>
           )}
         </div>
@@ -602,16 +691,22 @@ useEffect(() => {
                       <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4 border border-gray-600">
                         <FaUserFriends size={24} />
                       </div>
-                      <h3 className="text-lg font-semibold text-white mb-2">No hay usuarios</h3>
-                      <p className="text-sm mb-4">Comienza agregando el primer usuario</p>
-                      <button
-                        onClick={() => setShowCreateForm(true)}
-                        className="bg-white hover:bg-gray-200 text-black px-6 py-2 rounded-lg font-medium 
-                                 transition-all duration-200 border border-white hover:scale-105 flex items-center gap-2"
-                      >
-                        <FaUserPlus size={14} />
-                        Crear Usuario
-                      </button>
+                      <h3 className="text-lg font-semibold text-white mb-2">
+                        {currentSearch ? 'No se encontraron usuarios' : 'No hay usuarios'}
+                      </h3>
+                      <p className="text-sm mb-4">
+                        {currentSearch ? 'Intenta con otros términos de búsqueda' : 'Comienza agregando el primer usuario'}
+                      </p>
+                      {!currentSearch && (
+                        <button
+                          onClick={() => setShowCreateForm(true)}
+                          className="bg-white hover:bg-gray-200 text-black px-6 py-2 rounded-lg font-medium 
+                                   transition-all duration-200 border border-white hover:scale-105 flex items-center gap-2"
+                        >
+                          <FaUserPlus size={14} />
+                          Crear Usuario
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -619,18 +714,52 @@ useEffect(() => {
             </tbody>
           </table>
 
-          {/* Footer de la tabla */}
+          {/* Footer de la tabla con paginación */}
           {users.length > 0 && (
             <div className="bg-black border-t border-gray-600 px-4 py-3">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="text-sm text-gray-400">
-                  Total: <span className="text-white font-semibold">{users.length}</span> usuarios
+                  Mostrando {(pagination.currentPage - 1) * itemsPerPage + 1} - {Math.min(pagination.currentPage * itemsPerPage, pagination.totalUsers)} de {pagination.totalUsers} usuarios
                   {selectedIds.length > 0 && (
                     <span className="ml-4">
                       | Seleccionados: <span className="text-white font-semibold">{selectedIds.length}</span>
                     </span>
                   )}
                 </div>
+                
+                {/* Controles de paginación */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(pagination.currentPage - 1)}
+                    disabled={!pagination.hasPrev}
+                    className={`px-3 py-2 rounded-lg border text-sm transition-all duration-200 ${
+                      pagination.hasPrev 
+                        ? 'border-gray-600 text-white hover:bg-white hover:text-black' 
+                        : 'border-gray-800 text-gray-600 cursor-not-allowed'
+                    }`}
+                  >
+                    Anterior
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    <span className="text-gray-400 text-sm mx-2">
+                      Página {pagination.currentPage} de {pagination.totalPages}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => handlePageChange(pagination.currentPage + 1)}
+                    disabled={!pagination.hasNext}
+                    className={`px-3 py-2 rounded-lg border text-sm transition-all duration-200 ${
+                      pagination.hasNext 
+                        ? 'border-gray-600 text-white hover:bg-white hover:text-black' 
+                        : 'border-gray-800 text-gray-600 cursor-not-allowed'
+                    }`}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+
                 {selectedIds.length > 0 && (
                   <button
                     onClick={handleDeleteSelected}
@@ -763,20 +892,66 @@ useEffect(() => {
                 <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-3 border border-gray-600">
                   <FaUserFriends className="text-gray-400 text-lg" />
                 </div>
-                <h3 className="text-base font-semibold text-white mb-2">No hay usuarios</h3>
-                <p className="text-gray-400 text-xs mb-4">Crea el primer usuario</p>
-                <button
-                  onClick={() => setShowCreateForm(true)}
-                  className="bg-white hover:bg-gray-200 text-black px-4 py-2 rounded-lg text-sm font-medium 
-                           transition-all duration-200 border border-white w-full flex items-center justify-center gap-2"
-                >
-                  <FaUserPlus size={12} />
-                  Crear Usuario
-                </button>
+                <h3 className="text-base font-semibold text-white mb-2">
+                  {currentSearch ? 'No se encontraron usuarios' : 'No hay usuarios'}
+                </h3>
+                <p className="text-gray-400 text-xs mb-4">
+                  {currentSearch ? 'Intenta con otros términos de búsqueda' : 'Crea el primer usuario'}
+                </p>
+                {!currentSearch && (
+                  <button
+                    onClick={() => setShowCreateForm(true)}
+                    className="bg-white hover:bg-gray-200 text-black px-4 py-2 rounded-lg text-sm font-medium 
+                             transition-all duration-200 border border-white w-full flex items-center justify-center gap-2"
+                  >
+                    <FaUserPlus size={12} />
+                    Crear Usuario
+                  </button>
+                )}
               </div>
             </div>
           )}
         </div>
+
+        {/* Paginación móvil */}
+        {users.length > 0 && (
+          <div className="md:hidden flex flex-col gap-4 mt-6 p-4 bg-black rounded-xl border border-gray-600">
+            <div className="flex justify-between items-center">
+              <div className="text-xs text-gray-400">
+                Página {pagination.currentPage} de {pagination.totalPages}
+              </div>
+              <div className="text-xs text-gray-400">
+                {pagination.totalUsers} usuarios
+              </div>
+            </div>
+            
+            <div className="flex justify-between items-center">
+              <button
+                onClick={() => handlePageChange(pagination.currentPage - 1)}
+                disabled={!pagination.hasPrev}
+                className={`px-3 py-2 rounded-lg border text-xs transition-all duration-200 ${
+                  pagination.hasPrev 
+                    ? 'border-gray-600 text-white hover:bg-white hover:text-black' 
+                    : 'border-gray-800 text-gray-600 cursor-not-allowed'
+                }`}
+              >
+                Anterior
+              </button>
+
+              <button
+                onClick={() => handlePageChange(pagination.currentPage + 1)}
+                disabled={!pagination.hasNext}
+                className={`px-3 py-2 rounded-lg border text-xs transition-all duration-200 ${
+                  pagination.hasNext 
+                    ? 'border-gray-600 text-white hover:bg-white hover:text-black' 
+                    : 'border-gray-800 text-gray-600 cursor-not-allowed'
+                }`}
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MODALES (se mantienen igual que antes) */}
@@ -882,7 +1057,7 @@ useEffect(() => {
               </div>
               <h2 className="text-lg font-bold text-white mb-2">¿Eliminar todo?</h2>
               <p className="text-gray-400 text-xs">
-                Se eliminarán <b className="text-white">{users.length} usuarios</b>
+                Se eliminarán <b className="text-white">{pagination.totalUsers} usuarios</b>
               </p>
             </div>
             <div className="flex gap-2">

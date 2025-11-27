@@ -24,7 +24,7 @@ export default function Login() {
     }
     }, 1000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [isLoggedIn]);
 
   // --- LOADING ---
   if (loading)

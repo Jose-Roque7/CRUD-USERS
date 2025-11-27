@@ -37,16 +37,18 @@ async auth(
 }
 
 
-  @UseGuards(ApiKeyGuard, JwtGuard)
-  @Post('logout')
-  logout(@Res({ passthrough: true }) res) {
-    res.clearCookie('access_token', {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'strict',
-      path: '/',
-    });
-
-    return { message: 'Logged out' };
-  }
+  // En tu backend, verifica si hay alguna redirección
+@UseGuards(ApiKeyGuard, JwtGuard)
+@Post('logout')
+logout(@Res({ passthrough: true }) res) {
+  res.clearCookie('access_token', {
+    httpOnly: true,
+    secure: false,
+    sameSite: 'strict',
+    path: '/',
+  });
+  
+  // Asegúrate de que no hay redirecciones aquí
+  return { message: 'Logged out' };
+}
 }
