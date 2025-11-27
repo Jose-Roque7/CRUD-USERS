@@ -11,8 +11,8 @@ export class AppController {
 
   @UseGuards(ApiKeyGuard, JwtGuard)
   @Get('perfil')
-  getPerfil(@Req() req) {
-    return req.user;
+  getPerfil() {
+    return {message: 'Ok'};
   }
 
 

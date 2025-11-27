@@ -13,8 +13,7 @@ export class JwtGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
     const request = context.switchToHttp().getRequest();  // Obtén la solicitud (request)
-    const token = request.headers['authorization']?.split(' ')[1];  // Extrae el token de la cabecera Authorization
-    
+    const token = request.cookies?.access_token;
     if (!token) {
       return false;  // Si no hay token, la autenticación falla
     }

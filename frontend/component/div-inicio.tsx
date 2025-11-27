@@ -1,36 +1,43 @@
- import { useEffect, useState, useRef, useCallback } from "react";
-import { 
-  checkIfCodeExists, 
-  createUser, 
-  deleteUser, 
-  getItems, 
-  updateUser, 
-  getuser, 
-  seedUsers, 
-  deleteAll, 
-  deleteUsers 
+import { useEffect, useState } from "react";
+import {
+  checkIfCodeExists,
+  createUser,
+  deleteUser,
+  getItems,
+  updateUser,
+  getuser,
+  seedUsers,
+  deleteAll,
+  deleteUsers
 } from "@/lib/crud";
 
 import { checkIfUserExists } from "../lib/crud";
-import { FaEdit, FaSearch, FaSignOutAlt, FaTimes, FaTrash, FaUserFriends, FaUserPlus } from "react-icons/fa";
+import { FaBars, FaEdit, FaSearch, FaSignOutAlt, FaTimes, FaTrash, FaUserFriends, FaUserPlus } from "react-icons/fa";
 import toast from "react-hot-toast";
 import { AiOutlineBorder, AiOutlineCheckSquare, AiOutlineDelete } from "react-icons/ai";
-import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/authStore";
+import { useRouter } from "next/navigation";
 
-export default function divInicio() {
+// Definir interfaz para el usuario
+interface User {
+  _id: string;
+  name: string;
+  lastname: string;
+  codigo: number;
+}
 
-  const [users, setUsers] = useState<any[]>([]);
+export default function DivInicio() {
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [searchValue, setSearchValue] = useState("");
-  const [foundUser, setFoundUser] = useState<any | null>(null);
+  const [foundUser, setFoundUser] = useState<User | null>(null);
   const [searching, setSearching] = useState(false);
 
-  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  const [userToDelete, setUserToDelete] = useState<any | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [usersToDelete, setUsersToDelete] = useState(false);
 
   // Formularios
@@ -47,54 +54,45 @@ export default function divInicio() {
   });
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const { token, logout } = useAuthStore();  // Asumiendo que el token está en el store
+  const [authChecked, setAuthChecked] = useState(false);
+const { isLoggedIn, checkAuth, logout } = useAuthStore();
   const router = useRouter();
 
-  useEffect(() => {
-    // Evitar redirección si el token es null en el primer render
-    if (token === null) {
-      router.push('/');  // Redirigir a la página de inicio
-    }
-  }, [token, router]);  // Dependencias para que la redirección ocurra cuando cambie el token
+  // Estados para navbar móvil
+  const [mobileMenu, setMobileMenu] = useState(false);
 
-  if (token === null) {
-    // Mientras esperamos la comprobación de autenticación, puedes mostrar un loading
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
+// Verificar cookie de login al cargar
+useEffect(() => {
+  if (!isLoggedIn) {
+    router.push('/');
   }
+}, [isLoggedIn, router]);
 
-
-
-
-
-  
-
-
-
- 
 
   // Cargar usuarios
   useEffect(() => {
-    async function fetchUsers() {
+    if (!isLoggedIn) return;
+    async function fetchUsersAndLogin() {
       try {
         const data = await getItems();
         setUsers(data);
-      } catch (err) {
-        return null
-      } finally {
         setLoading(false);
+      } catch {
+        return;
       }
     }
 
-    fetchUsers();
-    const intervalId = setInterval(fetchUsers, 1000);
+    // Llamada inicial
+    if (isLoggedIn) fetchUsersAndLogin();
 
+    // Llamada cada segundo
+    const intervalId = setInterval(fetchUsersAndLogin, 1000);
+
+    // Limpieza
     return () => clearInterval(intervalId);
-  }, []);
+  }, [isLoggedIn]);
 
+ 
   // Selección múltiple
   const toggleSelect = (id: string) => {
     setSelectedIds(prev =>
@@ -109,14 +107,15 @@ export default function divInicio() {
 
     try {
       await deleteUsers(selectedIds);
-      toast.success(`${selectedIds.length} Usuarios eliminados correctamente`);
+      setSelectedIds([]);
+      toast.success(`${selectedIds.length} usuarios eliminados correctamente`);
     } catch (error) {
       toast.error("Error eliminando usuarios");
     }
   };
 
   // --- EDITAR ---
-  function handleEditClick(user: any) {
+  function handleEditClick(user: User) {
     setSelectedIds([]);
     setEditingUser(user);
     setFormDataEdit({
@@ -157,11 +156,11 @@ export default function divInicio() {
       toast.success("Usuario actualizado correctamente");
 
     } catch (err) {
-      return;
+      toast.error("Error al actualizar usuario");
     }
   }
 
-  function validar(original: any, editado: any) {
+  function validar(original: User, editado: typeof formDataEdit) {
     return original.codigo === editado.codigo;
   }
 
@@ -214,7 +213,7 @@ export default function divInicio() {
   }
 
   // --- ELIMINAR TODOS ---
-  async function handleDeleteUsers() {
+  async function handleDeleteAllUsers() {
     try {
       await deleteAll();
       const data = await getItems();
@@ -228,7 +227,10 @@ export default function divInicio() {
 
   // --- BUSCAR ---
   async function handleSearch() {
-    if (!searchValue.trim()) return;
+    if (!searchValue.trim()) {
+      toast.error("Por favor ingresa un valor para buscar");
+      return;
+    }
 
     setSearching(true);
     setFoundUser(null);
@@ -244,7 +246,7 @@ export default function divInicio() {
       setFoundUser(data);
 
     } catch {
-      return;
+      toast.error("Error al buscar usuario");
     } finally {
       setSearching(false);
     }
@@ -261,553 +263,764 @@ export default function divInicio() {
       toast.error("Error al eliminar el usuario!");
     }
   }
-  function handleLogout() {
-    logout();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
   }
 
   // --- LOADING ---
-  if (loading)
+  if (!isLoggedIn || loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex items-center justify-center h-screen bg-black">
+        <div className="w-12 h-12 border-4 border-gray-700 border-t-white rounded-full animate-spin"></div>
       </div>
     );
+  }
 
-  // --- AQUI CONTINÚA TU JSX ---
-  return ( 
-    <main className="min-h-screen bg-gray-900 text-white font-sans">
+  return (
+    <main className="min-h-screen bg-black text-white font-sans"> 
 
-  {/* NAVBAR */}
-  <header className="w-full px-6 py-6 bg-gray-900 text-white border-b border-white/10 sticky top-0 z-50">
+      {/* NAVBAR ELEGANTE */}
+      <header
+        className={`w-full fixed top-0 z-50 bg-black border-b border-gray-600 backdrop-blur-sm transition-all duration-300`}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
+          {/* Logo con estilo */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+              <FaUserFriends className="text-black text-sm" />
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+              Gestión de <span className="text-white">Usuarios</span>
+            </h1>
+          </div>
 
-    <div className="
-        max-w-7xl mx-auto 
-        flex flex-col items-center gap-4
-        sm:flex-row sm:justify-between sm:items-center
-    ">
+          {/* Botón mobile toggle */}
+          <div className="md:hidden">
+            <button
+              onClick={() => setMobileMenu(!mobileMenu)}
+              className="text-white p-2 rounded-lg border border-gray-600 hover:border-white transition-all duration-200"
+            >
+              {mobileMenu ? <FaTimes size={20} /> : <FaBars size={20} />}
+            </button>
+          </div>
 
-      {/* TÍTULO CENTRADO EN MÓVIL */}
-      <h1 className="text-3xl font-bold tracking-tight text-center sm:text-left">
-        Gestión de Usuarios
-      </h1>
-
-      {/* ACCIONES CENTRADAS */}
-      <div className="
-          flex flex-wrap gap-3 justify-center
-          sm:justify-end
-      ">
-
-        {/* BUSCADOR */}
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Buscar usuario..."
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            className="w-64 bg-gray-800 border border-white/20 rounded-xl pl-4 pr-12 py-2
-                       text-white placeholder-white/40 shadow-sm 
-                       focus:outline-none focus:ring-2 focus:ring-white transition"
-          />
-          <button
-            onClick={handleSearch}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white"
-          >
-            <FaSearch size={18} />
-          </button>
+          {/* Desktop Menu */}
+          <nav className="hidden md:flex gap-3 items-center">
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="px-4 py-2.5 rounded-xl bg-white text-black font-semibold hover:bg-gray-200 
+                       transition-all duration-200 flex items-center gap-2 hover:scale-105 border border-white"
+            >
+              <FaUserPlus size={16} />
+              Crear Usuario
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2.5 rounded-xl border border-gray-600 text-white font-medium 
+                       hover:bg-white hover:text-black transition-all duration-200 flex items-center gap-2 hover:scale-105"
+            >
+              <FaSignOutAlt size={16} />
+              Salir
+            </button>
+          </nav>
         </div>
 
-        {/* CREAR */}
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="px-4 py-2 rounded-xl bg-white text-gray-900 font-medium hover:bg-gray-200
-                     transition flex items-center gap-2"
-        >
-          <FaUserPlus size={18} /> Crear
-        </button>
-
-        {/* SALIR */}
-        <button
-          onClick={handleLogout}
-          className="px-4 py-2 rounded-xl border border-white/30 hover:bg-white/10 
-                     transition text-white flex items-center gap-2"
-        >
-          <FaSignOutAlt size={18} /> Salir
-        </button>
-
-      </div>
-    </div>
-  </header>
-
-  {/* CONTENIDO */}
-  <div className="max-w-screen-2xl mx-auto px-4 py-10">
-
-    {/* ACCIONES EXTRA */}
-    <div className="flex flex-wrap gap-4 mb-8">
-
-      {users.length === 0 && (
-        <button
-          onClick={handleSeedUsers}
-          className="px-4 py-2 rounded-xl border border-white/20 hover:bg-white/10 
-                     transition flex items-center gap-2 text-white"
-        >
-          <FaUserFriends /> Generar prueba
-        </button>
-      )}
-
-      {users.length !== 0 && (
-        <button
-          onClick={() => setUsersToDelete(true)}
-          className="px-4 py-2 rounded-xl bg-white text-gray-900 hover:bg-gray-200
-                     transition flex items-center gap-2"
-        >
-          <FaTrash /> Borrar todo
-        </button>
-      )}
-
-      {selectedIds.length > 0 && (
-        <button
-          onClick={() => (handleDeleteSelected(), setSelectedIds([]))}
-          className="px-4 py-2 rounded-xl bg-gray-200 text-gray-900 hover:bg-white 
-                     transition flex items-center gap-2"
-        >
-          <AiOutlineDelete /> Eliminar ({selectedIds.length})
-        </button>
-      )}
-
-    </div>
-
-    {/* ============================ */}
-    {/* TABLA FULL DESKTOP           */}
-    {/* ============================ */}
-    <div className="hidden md:block w-full rounded-xl overflow-hidden border border-white/10 bg-gray-800">
-
-      <table className="w-full text-left">
-        <thead className="bg-gray-900 text-white">
-          <tr>
-            <th className="p-4">ID</th>
-            <th className="p-4">Nombre</th>
-            <th className="p-4">Apellido</th>
-            <th className="p-4 text-center">Código</th>
-            <th className="p-4 text-center">Acciones</th>
-            <th className="p-4 text-center">Sel</th>
-          </tr>
-        </thead>
-
-        <tbody className="divide-y divide-white/10 bg-gray-800">
-          {users.length > 0 ? (
-            users.map((user) => (
-              <tr
-                key={user._id}
-                onDoubleClick={() => setFoundUser(user)}
-                className="hover:bg-gray-700 transition cursor-pointer"
+        {/* Mobile Menu Mejorado */}
+        {mobileMenu && (
+          <div className="md:hidden bg-black border-t border-gray-600 backdrop-blur-sm">
+            <div className="px-4 py-3 space-y-2">
+              <button
+                onClick={() => {
+                  setShowCreateForm(true);
+                  setMobileMenu(false);
+                }}
+                className="w-full text-left px-4 py-3 rounded-xl bg-white text-black font-semibold 
+                         transition-all duration-200 flex items-center gap-3 hover:scale-[1.02] border border-white"
               >
-                <td className="p-4 text-xs text-white/60">{user._id}</td>
-                <td className="p-4">{user.name}</td>
-                <td className="p-4">{user.lastname}</td>
-                <td className="p-4 text-center">{user.codigo}</td>
+                <FaUserPlus size={18} />
+                Crear Usuario
+              </button>
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setMobileMenu(false);
+                }}
+                className="w-full text-left px-4 py-3 rounded-xl border border-gray-600 text-white 
+                         font-medium transition-all duration-200 flex items-center gap-3 hover:bg-white hover:text-black"
+              >
+                <FaSignOutAlt size={18} />
+                Cerrar Sesión
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
 
-                <td className="p-4 text-center flex justify-center gap-5">
-                  <button onClick={() => handleEditClick(user)} className="text-white hover:opacity-70">
-                    <FaEdit size={20} />
-                  </button>
-                  <button onClick={() => setUserToDelete(user)} className="text-white hover:opacity-70">
-                    <FaTrash size={20} />
-                  </button>
-                </td>
+      {/* BUSCADOR ELEGANTE */}
+      <div className="w-full px-4 py-6 pt-20 flex justify-center">
+        <div className="relative w-full max-w-md">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Buscar por nombre, apellido o código..."
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="w-full bg-black border border-gray-600 rounded-xl pl-12 pr-4 py-3
+                       text-white placeholder-gray-400 shadow-lg
+                       focus:outline-none focus:border-white focus:ring-2 focus:ring-white/20 transition-all duration-200"
+            />
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+              <FaSearch size={16} />
+            </div>
 
-                <td className="text-center">
-                  <button
-                    onClick={() => toggleSelect(user._id)}
-                    className={selectedIds.includes(user._id)
-                      ? "text-white"
-                      : "text-white/50 hover:text-white"
-                    }
-                  >
-                    {selectedIds.includes(user._id)
-                      ? <AiOutlineCheckSquare size={26} />
-                      : <AiOutlineBorder size={26} />}
-                  </button>
-                </td>
+          </div>
+          {searching && (
+            <div className="absolute -bottom-6 left-0 right-0 flex justify-center">
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* CONTENIDO PRINCIPAL */}
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
+        {/* ACCIONES RÁPIDAS MEJORADAS */}
+        <div className="flex flex-wrap gap-3 mb-8 justify-center md:justify-start">
+          {users.length === 0 && (
+            <button
+              onClick={handleSeedUsers}
+              className="px-5 py-2.5 rounded-xl border border-gray-600 text-white font-medium 
+                       hover:bg-white hover:text-black transition-all duration-200 flex items-center gap-2 hover:scale-105"
+            >
+              <FaUserFriends size={16} />
+              Generar Datos de Prueba
+            </button>
+          )}
+
+          {users.length > 0 && (
+            <button
+              onClick={() => setUsersToDelete(true)}
+              className="px-5 py-2.5 rounded-xl bg-white text-black font-semibold 
+                       hover:bg-gray-200 transition-all duration-200 flex items-center gap-2 hover:scale-105 border border-white"
+            >
+              <FaTrash size={16} />
+              Borrar Todos
+            </button>
+          )}
+
+          {selectedIds.length > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              className="px-5 py-2.5 rounded-xl bg-red-600 text-white font-semibold 
+                       hover:bg-red-700 transition-all duration-200 flex items-center gap-2 hover:scale-105 border border-red-600"
+            >
+              <AiOutlineDelete size={18} />
+              Eliminar ({selectedIds.length})
+            </button>
+          )}
+
+          {/* Contador de usuarios */}
+          {users.length > 0 && (
+            <div className="px-4 py-2.5 rounded-xl border border-gray-600 text-white font-medium flex items-center gap-2">
+              <FaUserFriends size={14} />
+              <span>Total: <strong>{users.length}</strong></span>
+              {selectedIds.length > 0 && (
+                <span className="ml-2">| Seleccionados: <strong>{selectedIds.length}</strong></span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* TABLA DESKTOP */}
+        <div className="hidden md:block w-full rounded-2xl overflow-hidden border border-gray-600 bg-black shadow-2xl">
+          <table className="w-full">
+            <thead className="bg-black border-b border-gray-600">
+              <tr>
+                <th className="p-4 text-left">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                    <span className="text-white font-semibold text-sm uppercase tracking-wider">ID</span>
+                  </div>
+                </th>
+                <th className="p-4 text-left">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                    <span className="text-white font-semibold text-sm uppercase tracking-wider">Nombre</span>
+                  </div>
+                </th>
+                <th className="p-4 text-left">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                    <span className="text-white font-semibold text-sm uppercase tracking-wider">Apellido</span>
+                  </div>
+                </th>
+                <th className="p-4 text-center">
+                  <div className="flex items-center gap-2 justify-center">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                    <span className="text-white font-semibold text-sm uppercase tracking-wider">Código</span>
+                  </div>
+                </th>
+                <th className="p-4 text-center">
+                  <div className="flex items-center gap-2 justify-center">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                    <span className="text-white font-semibold text-sm uppercase tracking-wider">Acciones</span>
+                  </div>
+                </th>
+                <th className="p-4 text-center">
+                  <div className="flex items-center gap-2 justify-center">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                    <span className="text-white font-semibold text-sm uppercase tracking-wider">Seleccionar</span>
+                  </div>
+                </th>
               </tr>
-            ))
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {users.length > 0 ? (
+                users.map((user, index) => {
+                  const isSelected = selectedIds.includes(user._id);
+                  return (
+                    <tr
+                      key={user._id}
+                      onDoubleClick={() => setFoundUser(user)}
+                      className={`
+                        group transition-all duration-200 border-l-4
+                        ${isSelected 
+                          ? 'bg-white/5 border-l-white hover:bg-white/10' 
+                          : 'bg-transparent border-l-transparent hover:bg-white/5'
+                        }
+                        ${index % 2 === 0 ? 'bg-black/50' : 'bg-black/30'}
+                      `}
+                    >
+                      {/* ID */}
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`
+                            w-2 h-2 rounded-full transition-all duration-200
+                            ${isSelected ? 'bg-white animate-pulse' : 'bg-gray-500'}
+                          `}></div>
+                          <span className="font-mono text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded">
+                            {user._id.slice(-8)}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Nombre */}
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`
+                            w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold border
+                            ${isSelected 
+                              ? 'bg-white text-black border-white' 
+                              : 'bg-gray-800 text-white border-gray-600 group-hover:border-gray-400'
+                            }
+                          `}>
+                            {user.name.charAt(0)}
+                          </div>
+                          <span className="text-white font-medium">{user.name}</span>
+                        </div>
+                      </td>
+
+                      {/* Apellido */}
+                      <td className="p-4">
+                        <span className="text-gray-200">{user.lastname}</span>
+                      </td>
+
+                      {/* Código */}
+                      <td className="p-4 text-center">
+                        <span className={`
+                          font-mono font-bold px-3 py-1.5 rounded-lg border text-sm
+                          ${isSelected 
+                            ? 'bg-white text-black border-white' 
+                            : 'bg-gray-800 text-white border-gray-600'
+                          }
+                        `}>
+                          {user.codigo}
+                        </span>
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="p-4">
+                        <div className="flex justify-center gap-2">
+                          <button
+                            onClick={() => handleEditClick(user)}
+                            className={`
+                              p-2 rounded-lg border transition-all duration-200 transform hover:scale-110
+                              ${isSelected 
+                                ? 'bg-white text-black border-white hover:bg-gray-100' 
+                                : 'bg-gray-800 text-white border-gray-600 hover:bg-gray-700 hover:border-gray-400'
+                              }
+                            `}
+                            title="Editar usuario"
+                          >
+                            <FaEdit size={16} />
+                          </button>
+                          <button
+                            onClick={() => setUserToDelete(user)}
+                            className={`
+                              p-2 rounded-lg border transition-all duration-200 transform hover:scale-110
+                              ${isSelected 
+                                ? 'bg-black text-white border-white hover:bg-gray-800' 
+                                : 'bg-gray-800 text-white border-gray-600 hover:bg-red-500/20 hover:border-red-400'
+                              }
+                            `}
+                            title="Eliminar usuario"
+                          >
+                            <FaTrash size={16} />
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Selección */}
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => toggleSelect(user._id)}
+                          className={`
+                            p-2 rounded-lg border-2 transition-all duration-200 transform hover:scale-110
+                            ${isSelected 
+                              ? 'bg-white text-black border-white shadow-lg' 
+                              : 'bg-transparent text-white border-gray-500 hover:border-white'
+                            }
+                          `}
+                          title={isSelected ? "Deseleccionar" : "Seleccionar"}
+                        >
+                          {isSelected ? 
+                            <AiOutlineCheckSquare size={20} /> : 
+                            <AiOutlineBorder size={20} />
+                          }
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={6} className="text-center py-12">
+                    <div className="flex flex-col items-center justify-center text-gray-400">
+                      <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4 border border-gray-600">
+                        <FaUserFriends size={24} />
+                      </div>
+                      <h3 className="text-lg font-semibold text-white mb-2">No hay usuarios</h3>
+                      <p className="text-sm mb-4">Comienza agregando el primer usuario</p>
+                      <button
+                        onClick={() => setShowCreateForm(true)}
+                        className="bg-white hover:bg-gray-200 text-black px-6 py-2 rounded-lg font-medium 
+                                 transition-all duration-200 border border-white hover:scale-105 flex items-center gap-2"
+                      >
+                        <FaUserPlus size={14} />
+                        Crear Usuario
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          {/* Footer de la tabla */}
+          {users.length > 0 && (
+            <div className="bg-black border-t border-gray-600 px-4 py-3">
+              <div className="flex justify-between items-center">
+                <div className="text-sm text-gray-400">
+                  Total: <span className="text-white font-semibold">{users.length}</span> usuarios
+                  {selectedIds.length > 0 && (
+                    <span className="ml-4">
+                      | Seleccionados: <span className="text-white font-semibold">{selectedIds.length}</span>
+                    </span>
+                  )}
+                </div>
+                {selectedIds.length > 0 && (
+                  <button
+                    onClick={handleDeleteSelected}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm 
+                             font-medium transition-all duration-200 flex items-center gap-2 hover:scale-105"
+                  >
+                    <AiOutlineDelete size={16} />
+                    Eliminar ({selectedIds.length})
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* MOBILE CARDS */}
+        <div className="md:hidden space-y-3 px-2">
+          {users.length > 0 ? (
+            users.map((user) => {
+              let pressTimer: NodeJS.Timeout;
+
+              const handleMouseDown = () => {
+                pressTimer = setTimeout(() => toggleSelect(user._id), 500);
+              };
+
+              const handleMouseUp = () => {
+                clearTimeout(pressTimer);
+              };
+
+              const isSelected = selectedIds.includes(user._id);
+
+              return (
+                <div
+                  key={user._id}
+                  className={`
+                    relative group overflow-hidden rounded-xl p-3 cursor-pointer 
+                    transition-all duration-200 border min-h-[100px]
+                    ${isSelected
+                      ? "bg-black border-2 border-white shadow-lg"
+                      : "bg-black border border-gray-600 hover:border-gray-400"
+                    }
+                  `}
+                  onDoubleClick={() => setFoundUser(user)}
+                  onMouseDown={handleMouseDown}
+                  onMouseUp={handleMouseUp}
+                  onTouchStart={handleMouseDown}
+                  onTouchEnd={handleMouseUp}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`
+                      relative flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center
+                      border font-bold text-sm
+                      ${isSelected
+                        ? "bg-white text-black border-white"
+                        : "bg-gray-800 text-white border-gray-500"
+                      }
+                    `}>
+                      {user.name.charAt(0)}{user.lastname.charAt(0)}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start mb-1">
+                        <h3 className="text-base font-bold text-white truncate pr-2">
+                          {user.name} {user.lastname}
+                        </h3>
+                        {isSelected && (
+                          <div className="bg-white text-black p-1 rounded-full flex-shrink-0">
+                            <AiOutlineCheckSquare size={12} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-gray-400">Código:</span>
+                          <span className="text-xs font-mono font-bold text-white bg-gray-800 px-1.5 py-0.5 rounded">
+                            {user.codigo}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-gray-500 font-mono bg-gray-800/50 px-1.5 py-0.5 rounded">
+                            ID: {user._id.slice(-6)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-700">
+                        <div className="flex gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditClick(user);
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 bg-gray-800 hover:bg-gray-700 
+                                     text-white border border-gray-600 rounded text-xs transition-colors"
+                          >
+                            <FaEdit size={10} />
+                            Editar
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setUserToDelete(user);
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 bg-black hover:bg-gray-800 
+                                     text-white border border-gray-600 rounded text-xs transition-colors"
+                          >
+                            <FaTrash size={10} />
+                            Borrar
+                          </button>
+                        </div>
+
+                        <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span>
+                          Presiona
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isSelected && (
+                    <div className="absolute inset-0 border-2 border-white rounded-xl pointer-events-none"></div>
+                  )}
+                </div>
+              );
+            })
           ) : (
-            <tr>
-              <td colSpan={6} className="text-center py-6 text-white/40">
-                No hay usuarios
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-
-    {/* ============================ */}
-    {/* MOBILE CARDS (DARK)          */}
-    {/* ============================ */}
-   <div className="md:hidden space-y-6">
-  {users.length > 0 ? (
-    users.map((user) => {
-      let pressTimer: NodeJS.Timeout;
-
-      const handleMouseDown = () => {
-        // Inicia timer para selección con long press
-        pressTimer = setTimeout(() => {
-          toggleSelect(user._id);
-        }, 600); // 600ms presionado
-      };
-
-      const handleMouseUp = () => {
-        clearTimeout(pressTimer);
-      };
-
-      return (
-        <div
-          key={user._id}
-          className={`bg-gray-800 border ${
-            selectedIds.includes(user._id)
-              ? "border-blue-500"
-              : "border-white/10"
-          } rounded-2xl p-5 shadow-sm text-center cursor-pointer transition transform hover:scale-[1.02]`}
-          onDoubleClick={() => setFoundUser(user)}
-          onMouseDown={handleMouseDown}
-          onMouseUp={handleMouseUp}
-          onTouchStart={handleMouseDown}
-          onTouchEnd={handleMouseUp}
-        >
-          {/* ID */}
-          <p className="text-xs text-white/40 truncate mb-2">{user._id}</p>
-
-          {/* Información principal */}
-          <h3 className="text-xl font-semibold text-white">{user.name}</h3>
-          <p className="text-white/70">{user.lastname}</p>
-          <p className="text-white mt-1 font-medium">Código: {user.codigo}</p>
-
-          {/* Indicador de selección */}
-          {selectedIds.includes(user._id) && (
-            <p className="mt-3 text-blue-400 font-semibold">Seleccionado</p>
+            <div className="text-center py-8 px-4">
+              <div className="bg-black rounded-xl p-6 border border-gray-600 mx-auto max-w-xs">
+                <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-3 border border-gray-600">
+                  <FaUserFriends className="text-gray-400 text-lg" />
+                </div>
+                <h3 className="text-base font-semibold text-white mb-2">No hay usuarios</h3>
+                <p className="text-gray-400 text-xs mb-4">Crea el primer usuario</p>
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="bg-white hover:bg-gray-200 text-black px-4 py-2 rounded-lg text-sm font-medium 
+                           transition-all duration-200 border border-white w-full flex items-center justify-center gap-2"
+                >
+                  <FaUserPlus size={12} />
+                  Crear Usuario
+                </button>
+              </div>
+            </div>
           )}
         </div>
-      );
-    })
-  ) : (
-    <p className="text-center text-white/40">No hay usuarios</p>
-  )}
-</div>
-
-
-
-
-
-
-    </div>
-      {/* MODAL: Crear Usuario */}
-{showCreateForm && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center 
-                  bg-gray-900/70 backdrop-blur-sm p-4">
-    <div className="bg-gray-800 w-full max-w-sm rounded-2xl shadow-xl p-6 
-                    relative border border-white/10 max-h-[90vh] overflow-y-auto">
-
-      <button
-        onClick={() => setShowCreateForm(false)}
-        className="absolute top-4 right-4 text-white/70 hover:text-red-400 
-                   rounded-full p-1 hover:bg-white/10 transition"
-      >
-        <FaTimes size={20} />
-      </button>
-
-      <h2 className="text-2xl font-bold text-white mb-6 text-center">
-        Crear Usuario
-      </h2>
-
-      <div className="grid grid-cols-1 gap-4">
-        <input
-          type="text"
-          placeholder="Nombre"
-          value={formDataCreate.name}
-          onChange={(e) =>
-            setFormDataCreate({ ...formDataCreate, name: e.target.value })
-          }
-          className="bg-gray-900 border border-white/20 rounded-lg px-3 py-2 w-full 
-                     text-white placeholder-white/40"
-        />
-
-        <input
-          type="text"
-          placeholder="Apellido"
-          value={formDataCreate.lastname}
-          onChange={(e) =>
-            setFormDataCreate({ ...formDataCreate, lastname: e.target.value })
-          }
-          className="bg-gray-900 border border-white/20 rounded-lg px-3 py-2 w-full 
-                     text-white placeholder-white/40"
-        />
-
-        <input
-          type="number"
-          placeholder="Código"
-          value={formDataCreate.codigo}
-          onChange={(e) =>
-            setFormDataCreate({ ...formDataCreate, codigo: Number(e.target.value) })
-          }
-          className="bg-gray-900 border border-white/20 rounded-lg px-3 py-2 w-full 
-                     text-white placeholder-white/40"
-        />
       </div>
 
-      <div className="flex gap-3 mt-6 justify-center">
-        <button
-          onClick={handleCreateUser}
-          className="bg-white text-gray-900 font-medium px-5 py-2 
-                     rounded-lg transition hover:bg-gray-200 w-full"
-        >
-          Crear
-        </button>
-
-        <button
-          onClick={() => {
-            setShowCreateForm(false);
-            setFormDataCreate({ name: '', lastname: '', codigo: 1 });
-          }}
-          className="bg-gray-700 hover:bg-gray-600 text-white font-medium px-5 py-2 
-                     rounded-lg transition w-full"
-        >
-          Cancelar
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-{/* MODAL: Eliminar un usuario */}
-{userToDelete && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center 
-                  bg-gray-900/70 backdrop-blur-sm p-4">
-    <div className="bg-gray-800 w-full max-w-sm rounded-2xl shadow-xl p-6 
-                    relative border border-white/10">
-
-      <h2 className="text-xl font-bold text-white mb-4 text-center">
-        ¿Eliminar usuario?
-      </h2>
-
-      <p className="text-white/70 text-center mb-6 text-sm">
-        Estás a punto de eliminar a{' '}
-        <span className="font-semibold text-white">
-          {userToDelete.name} {userToDelete.lastname}
-        </span>.
-      </p>
-
-      <div className="flex justify-center gap-3">
-        <button
-          onClick={() => {
-            handleDeleteUser(userToDelete._id);
-            setUserToDelete(null);
-          }}
-          className="bg-red-600 hover:bg-red-700 text-white font-medium px-5 py-2 
-                     rounded-lg transition w-full"
-        >
-          Sí, eliminar
-        </button>
-
-        <button
-          onClick={() => setUserToDelete(null)}
-          className="bg-gray-700 hover:bg-gray-600 text-white font-medium px-5 py-2 
-                     rounded-lg transition w-full"
-        >
-          Cancelar
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-{/* MODAL: Eliminar todos */}
-{usersToDelete && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center 
-                  bg-gray-900/70 backdrop-blur-sm p-4">
-    <div className="bg-gray-800 w-full max-w-sm rounded-2xl shadow-xl p-6 
-                    relative border border-white/10">
-
-      <h2 className="text-xl font-bold text-white mb-4 text-center">
-        ¿Eliminar todos los usuarios?
-      </h2>
-
-      <p className="text-white/70 text-center mb-6 text-sm">
-        Esta acción eliminará <b className="text-white">todos los usuarios</b>.
-      </p>
-
-      <div className="flex justify-center gap-3">
-        <button
-          onClick={() => {
-            handleDeleteUsers();
-            setUsersToDelete(false);
-          }}
-          className="bg-red-600 hover:bg-red-700 text-white font-medium px-5 py-2 
-                     rounded-lg transition w-full"
-        >
-          Sí, eliminar todo
-        </button>
-
-        <button
-          onClick={() => setUsersToDelete(false)}
-          className="bg-gray-700 hover:bg-gray-600 text-white font-medium px-5 py-2 
-                     rounded-lg transition w-full"
-        >
-          Cancelar
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-{foundUser && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center 
-                  bg-gray-900/70 backdrop-blur-sm p-4">
-
-    <div className="bg-gray-800 w-full max-w-sm rounded-2xl shadow-xl p-6 
-                    relative border border-white/10 flex flex-col items-center text-center">
-
-      {/* Cerrar */}
-      <button
-        onClick={() => setFoundUser(null)}
-        className="absolute top-4 right-4 text-white/70 hover:text-red-400 
-                   rounded-full p-1 hover:bg-white/10 transition"
-      >
-        <FaTimes size={20} />
-      </button>
-
-      {/* Título */}
-      <h2 className="text-2xl font-bold text-white text-center mb-4">
-        Usuario encontrado
-      </h2>
-
-      {/* ID */}
-      <p className="text-white/50 text-xs mb-4 truncate w-full">{foundUser._id}</p>
-
-      {/* Información principal */}
-      <div className="w-full mb-6">
-        <div className="flex justify-between mb-2">
-          <span className="text-white/80 font-medium">Nombre:</span>
-          <span className="text-white font-semibold">{foundUser.name}</span>
+      {/* MODALES (se mantienen igual que antes) */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3">
+          <div className="bg-black w-full max-w-xs rounded-xl border border-gray-600 shadow-2xl p-4 relative">
+            <button
+              onClick={() => setShowCreateForm(false)}
+              className="absolute top-3 right-3 text-white/70 hover:text-white rounded-lg p-1 transition"
+            >
+              <FaTimes size={18} />
+            </button>
+            <h2 className="text-lg font-bold text-white mb-4 text-center">Crear Usuario</h2>
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="Nombre"
+                value={formDataCreate.name}
+                onChange={(e) => setFormDataCreate({ ...formDataCreate, name: e.target.value })}
+                className="bg-black border border-gray-600 rounded-lg px-3 py-2 w-full text-white 
+                         placeholder-gray-400 focus:outline-none focus:border-white text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Apellido"
+                value={formDataCreate.lastname}
+                onChange={(e) => setFormDataCreate({ ...formDataCreate, lastname: e.target.value })}
+                className="bg-black border border-gray-600 rounded-lg px-3 py-2 w-full text-white 
+                         placeholder-gray-400 focus:outline-none focus:border-white text-sm"
+              />
+              <input
+                type="number"
+                placeholder="Código"
+                value={formDataCreate.codigo}
+                onChange={(e) => setFormDataCreate({ ...formDataCreate, codigo: Number(e.target.value) })}
+                className="bg-black border border-gray-600 rounded-lg px-3 py-2 w-full text-white 
+                         placeholder-gray-400 focus:outline-none focus:border-white text-sm"
+              />
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={handleCreateUser}
+                className="bg-white text-black font-medium px-4 py-2 rounded-lg transition hover:bg-gray-200 
+                         active:scale-95 text-sm flex-1"
+              >
+                Crear
+              </button>
+              <button
+                onClick={() => {
+                  setShowCreateForm(false);
+                  setFormDataCreate({ name: '', lastname: '', codigo: 1 });
+                }}
+                className="bg-gray-800 hover:bg-gray-700 text-white font-medium px-4 py-2 rounded-lg 
+                         transition active:scale-95 text-sm flex-1 border border-gray-600"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
+      )}
 
-        <div className="flex justify-between mb-2">
-          <span className="text-white/80 font-medium">Apellido:</span>
-          <span className="text-white font-semibold">{foundUser.lastname}</span>
+      {/* Resto de modales... */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3">
+          <div className="bg-black w-full max-w-xs rounded-xl border border-gray-600 shadow-2xl p-4 relative">
+            <h2 className="text-lg font-bold text-white mb-3 text-center">¿Eliminar usuario?</h2>
+            <div className="bg-gray-800/50 rounded-lg p-3 mb-4 border border-gray-600">
+              <p className="text-white text-center text-sm">
+                <span className="font-semibold">{userToDelete.name} {userToDelete.lastname}</span>
+              </p>
+              <p className="text-gray-400 text-xs text-center mt-1">Código: {userToDelete.codigo}</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  handleDeleteUser(userToDelete._id);
+                  setUserToDelete(null);
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg 
+                         transition active:scale-95 text-sm flex-1"
+              >
+                Eliminar
+              </button>
+              <button
+                onClick={() => setUserToDelete(null)}
+                className="bg-gray-800 hover:bg-gray-700 text-white font-medium px-4 py-2 rounded-lg 
+                         transition active:scale-95 text-sm flex-1 border border-gray-600"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
+      )}
 
-        <div className="flex justify-between">
-          <span className="text-white/80 font-medium">Código:</span>
-          <span className="text-white font-semibold">{foundUser.codigo}</span>
+      {usersToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3">
+          <div className="bg-black w-full max-w-xs rounded-xl border border-gray-600 shadow-2xl p-4 relative">
+            <div className="text-center mb-4">
+              <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <FaTrash className="text-red-400 text-lg" />
+              </div>
+              <h2 className="text-lg font-bold text-white mb-2">¿Eliminar todo?</h2>
+              <p className="text-gray-400 text-xs">
+                Se eliminarán <b className="text-white">{users.length} usuarios</b>
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  handleDeleteAllUsers();
+                  setUsersToDelete(false);
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg 
+                         transition active:scale-95 text-sm flex-1"
+              >
+                Sí, eliminar
+              </button>
+              <button
+                onClick={() => setUsersToDelete(false)}
+                className="bg-gray-800 hover:bg-gray-700 text-white font-medium px-4 py-2 rounded-lg 
+                         transition active:scale-95 text-sm flex-1 border border-gray-600"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Botones */}
-      <div className="flex justify-between gap-4 w-full">
-        <button
-          onClick={() => {
-            handleEditClick(foundUser);
-            setFoundUser(null);
-          }}
-          className="flex-1 bg-white text-gray-900 font-medium px-4 py-2 
-                     rounded-lg transition hover:bg-gray-200"
-        >
-          Editar
-        </button>
+      {foundUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3">
+          <div className="bg-black w-full max-w-xs rounded-xl border border-gray-600 shadow-2xl p-4 relative">
+            <button
+              onClick={() => setFoundUser(null)}
+              className="absolute top-3 right-3 text-white/70 hover:text-white rounded-lg p-1 transition"
+            >
+              <FaTimes size={18} />
+            </button>
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-3 border border-gray-600">
+                <span className="text-white font-bold text-lg">
+                  {foundUser.name.charAt(0)}{foundUser.lastname.charAt(0)}
+                </span>
+              </div>
+              <h2 className="text-lg font-bold text-white">Usuario encontrado</h2>
+              <p className="text-gray-400 text-xs mt-1 truncate">{foundUser._id}</p>
+            </div>
+            <div className="bg-gray-800/50 rounded-lg p-3 mb-4 border border-gray-600">
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-400 text-sm">Nombre:</span>
+                <span className="text-white font-semibold text-sm">{foundUser.name}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-400 text-sm">Apellido:</span>
+                <span className="text-white font-semibold text-sm">{foundUser.lastname}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-400 text-sm">Código:</span>
+                <span className="text-white font-semibold text-sm">{foundUser.codigo}</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  handleEditClick(foundUser);
+                  setFoundUser(null);
+                }}
+                className="bg-white text-black font-medium px-4 py-2 rounded-lg transition hover:bg-gray-200 
+                         active:scale-95 text-sm flex-1"
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => {
+                  setUserToDelete(foundUser);
+                  setFoundUser(null);
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg 
+                         transition active:scale-95 text-sm flex-1"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-        <button
-          onClick={() => {
-            setUserToDelete(foundUser);
-            setFoundUser(null);
-          }}
-          className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 
-                     rounded-lg transition"
-        >
-          Eliminar
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-
-{/* MODAL: Editar Usuario */}
-{editingUser && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center 
-                  bg-gray-900/70 backdrop-blur-sm p-4">
-    <div className="bg-gray-800 w-full max-w-sm rounded-2xl shadow-xl p-6 
-                    relative border border-white/10 max-h-[90vh] overflow-y-auto">
-
-      <button
-        onClick={() => setEditingUser(null)}
-        className="absolute top-4 right-4 text-white/70 hover:text-red-400 
-                   transition rounded-full p-1 hover:bg-white/10"
-      >
-        <FaTimes size={20} />
-      </button>
-
-      <h2 className="text-xl font-bold text-white mb-6 text-center">
-        Editar usuario
-      </h2>
-
-      <div className="grid grid-cols-1 gap-4">
-        <input
-          type="text"
-          placeholder="Nombre"
-          value={formDataEdit.name}
-          onChange={(e) =>
-            setFormDataEdit({ ...formDataEdit, name: e.target.value })
-          }
-          className="bg-gray-900 border border-white/20 rounded-lg px-3 py-2 w-full 
-                     text-white placeholder-white/40"
-        />
-
-        <input
-          type="text"
-          placeholder="Apellido"
-          value={formDataEdit.lastname}
-          onChange={(e) =>
-            setFormDataEdit({ ...formDataEdit, lastname: e.target.value })
-          }
-          className="bg-gray-900 border border-white/20 rounded-lg px-3 py-2 w-full 
-                     text-white placeholder-white/40"
-        />
-
-        <input
-          type="number"
-          placeholder="Código"
-          value={formDataEdit.codigo}
-          onChange={(e) =>
-            setFormDataEdit({ ...formDataEdit, codigo: Number(e.target.value) })
-          }
-          className="bg-gray-900 border border-white/20 rounded-lg px-3 py-2 w-full 
-                     text-white placeholder-white/40"
-        />
-      </div>
-
-      <div className="flex gap-3 mt-6 justify-center">
-        <button
-          onClick={() =>
-            handleUpdateUser(validar(editingUser, formDataEdit))
-          }
-          className="bg-white text-gray-900 font-medium px-5 py-2 
-                     rounded-lg transition hover:bg-gray-200 w-full"
-        >
-          Guardar cambios
-        </button>
-
-        <button
-          onClick={() => setEditingUser(null)}
-          className="bg-gray-700 hover:bg-gray-600 text-white font-medium px-5 py-2 
-                     rounded-lg transition w-full"
-        >
-          Cancelar
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3">
+          <div className="bg-black w-full max-w-xs rounded-xl border border-gray-600 shadow-2xl p-4 relative">
+            <button
+              onClick={() => setEditingUser(null)}
+              className="absolute top-3 right-3 text-white/70 hover:text-white rounded-lg p-1 transition"
+            >
+              <FaTimes size={18} />
+            </button>
+            <h2 className="text-lg font-bold text-white mb-4 text-center">Editar usuario</h2>
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="Nombre"
+                value={formDataEdit.name}
+                onChange={(e) => setFormDataEdit({ ...formDataEdit, name: e.target.value })}
+                className="bg-black border border-gray-600 rounded-lg px-3 py-2 w-full text-white 
+                         placeholder-gray-400 focus:outline-none focus:border-white text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Apellido"
+                value={formDataEdit.lastname}
+                onChange={(e) => setFormDataEdit({ ...formDataEdit, lastname: e.target.value })}
+                className="bg-black border border-gray-600 rounded-lg px-3 py-2 w-full text-white 
+                         placeholder-gray-400 focus:outline-none focus:border-white text-sm"
+              />
+              <input
+                type="number"
+                placeholder="Código"
+                value={formDataEdit.codigo}
+                onChange={(e) => setFormDataEdit({ ...formDataEdit, codigo: Number(e.target.value) })}
+                className="bg-black border border-gray-600 rounded-lg px-3 py-2 w-full text-white 
+                         placeholder-gray-400 focus:outline-none focus:border-white text-sm"
+              />
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => handleUpdateUser(validar(editingUser, formDataEdit))}
+                className="bg-white text-black font-medium px-4 py-2 rounded-lg transition hover:bg-gray-200 
+                         active:scale-95 text-sm flex-1"
+              >
+                Guardar
+              </button>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="bg-gray-800 hover:bg-gray-700 text-white font-medium px-4 py-2 rounded-lg 
+                         transition active:scale-95 text-sm flex-1 border border-gray-600"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

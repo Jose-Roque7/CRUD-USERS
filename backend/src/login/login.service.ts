@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Login, LoginDocument } from './schemas/login.schema';
@@ -23,15 +23,25 @@ export class LoginService {
   }
 
   async validateLogin(loginLoginDto: LoginLoginDto) {
-    const login = await this.loginModel.findOne({ email: loginLoginDto.email });
-    if (!login) throw new BadRequestException('Usuario no encontrado');
+  const login = await this.loginModel.findOne({ email: loginLoginDto.email });
 
-    const isMatch = await login.comparePassword(loginLoginDto.password);
-    if (!isMatch) throw new BadRequestException('Contraseña incorrecta');
-
-    const payload = { sub: login._id, email: login.email };
-    const token = this.jwtService.sign(payload);  // Aquí se firma el JWT
-
-    return { email: login.email, access_token: token };
+  if (!login) {
+    // Retornamos objeto en vez de lanzar NotFoundException
+    return { success: false, message: 'Usuario no encontrado' };
   }
+
+  const isMatch = await login.comparePassword(loginLoginDto.password);
+  if (!isMatch) {
+    return { success: false, message: 'Usuario no encontrado' };
+  }
+
+  const payload = { sub: login._id, email: login.email };
+  const token = this.jwtService.sign(payload);
+
+  return {
+    success: true,
+    message: 'Login exitoso',
+    data: { email: login.email, access_token: token },
+  };
+}
 }
