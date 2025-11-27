@@ -112,6 +112,11 @@ export class UserService {
       throw new InternalServerErrorException(`No se pudo crear Usuario, verificar el server logs.`);
   }
 
+  async getAll() {
+    const users = await this.UserModel.find().exec();
+    return users;
+  }
+
   async usersd(id: string[]){
     await this.UserModel.deleteMany({ _id: { $in: id } })
     return 'Usuarios Eliminados Correctamente.'

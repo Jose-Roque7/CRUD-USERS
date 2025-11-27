@@ -18,6 +18,12 @@ export class UserController {
   }
 
   @UseGuards(ApiKeyGuard, JwtGuard)
+  @Get('all')
+  getAll() {
+    return this.userService.getAll();
+  }
+
+  @UseGuards(ApiKeyGuard, JwtGuard)
   @Get()
   findAll(@Query() paginationDto : PaginationDto) {
     return this.userService.findAll(paginationDto);

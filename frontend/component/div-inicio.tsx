@@ -11,7 +11,6 @@ import {
   deleteUsers
 } from "@/lib/crud";
 
-import { checkIfUserExists } from "../lib/crud";
 import { FaBars, FaEdit, FaSearch, FaSignOutAlt, FaTimes, FaTrash, FaUserFriends, FaUserPlus } from "react-icons/fa";
 import toast from "react-hot-toast";
 import { AiOutlineBorder, AiOutlineCheckSquare, AiOutlineDelete } from "react-icons/ai";

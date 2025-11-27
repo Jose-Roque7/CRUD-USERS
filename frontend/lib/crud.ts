@@ -88,7 +88,7 @@ export const deleteUser = async (id: string) => {
 // Función para verificar si un código ya existe
 export const checkIfCodeExists = async (codigo: number, currentUserId: string = "") => {
   try {
-    const response = await api.get("/user");
+    const response = await api.get("/user/all");
     const users = response.data;
     return users.some(
       (user: { codigo: number; _id: string }) => user.codigo === codigo && user._id !== currentUserId
@@ -99,30 +99,6 @@ export const checkIfCodeExists = async (codigo: number, currentUserId: string = 
   }
 };
 
-// Función para verificar si el usuario existe
-export const checkIfUserExists = async (valor: string, currentUserId: string = "") => {
-  try {
-    const response = await api.get("/user");
-    const users = response.data;
-
-    // Convertimos valor a número si es posible, para comparar con codigo
-    const numericValue = Number(valor);
-    const isNumeric = !isNaN(numericValue);
-
-    // Buscar coincidencias por codigo, name o id
-    return users.some(
-      (user: { codigo: number; name: string; _id: string }) =>
-        user._id !== currentUserId && (
-          (isNumeric && user.codigo === numericValue) ||
-          user.name.toLowerCase().trim() === valor.toLowerCase().trim() ||
-          user._id === valor
-        )
-    );
-  } catch (err) {
-    console.error("Error al verificar usuario:", err);
-    throw new Error("Error al verificar usuario");
-  }
-};
 
 
 
